@@ -1,13 +1,10 @@
 from collections import Counter
-from datetime import datetime, date, timezone
+from datetime import date
 
 from sqlalchemy.orm import Session
 
 from app.models.audit import AuditLog
-
-
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+from app.core.time_utils import utc_now, utc_today, utc_day_range
 
 
 def record_audit(
@@ -37,10 +34,9 @@ def record_audit(
 
 def get_daily_stats(db: Session, tenant_id: str, target_date: date | None = None) -> dict:
     if target_date is None:
-        target_date = datetime.now(timezone.utc).date()
+        target_date = utc_today()
 
-    start_utc = datetime.combine(target_date, datetime.min.time(), tzinfo=timezone.utc)
-    end_utc = datetime.combine(target_date, datetime.max.time(), tzinfo=timezone.utc)
+    start_utc, end_utc = utc_day_range(target_date)
 
     logs = (
         db.query(AuditLog)

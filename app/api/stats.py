@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_tenant_id
@@ -21,7 +21,6 @@ def get_daily(
         try:
             target_date = datetime.strptime(date, "%Y-%m-%d").date()
         except ValueError:
-            from fastapi import HTTPException
             raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
     else:
         target_date = None

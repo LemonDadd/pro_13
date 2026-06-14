@@ -1,6 +1,5 @@
 import os
 import uuid
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Form
 from sqlalchemy.orm import Session
@@ -8,14 +7,11 @@ from sqlalchemy.orm import Session
 from app.core.auth import get_tenant_id
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.time_utils import utc_now
 from app.models.batch import BatchJob
 from app.schemas.api import BatchJobResponse
 
 router = APIRouter(prefix="/batch", tags=["batch"])
-
-
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 @router.post("/mask", response_model=BatchJobResponse)

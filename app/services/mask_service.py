@@ -2,7 +2,8 @@ import json
 import uuid
 from typing import Any
 
-from app.detectors.base import Finding, detect_text, detect_json
+from app.detectors.base import detect_text, detect_json
+from app.detectors.finding import Finding
 from app.utils.hash_utils import compute_value_hash
 
 

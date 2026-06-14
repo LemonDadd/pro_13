@@ -2,19 +2,15 @@ import os
 import json
 import threading
 import time
-from datetime import datetime, timezone
 from collections import Counter
 
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import SessionLocal
+from app.core.time_utils import utc_now
 from app.models.batch import BatchJob
 from app.services.mask_service import mask_text, mask_json
-
-
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 class BatchWorker:
@@ -58,7 +54,7 @@ class BatchWorker:
 
             job_id = job.id
             job.status = "processing"
-            job.started_at = _utc_now()
+            job.started_at = utc_now()
             db.commit()
 
             input_path = os.path.join("data", "batch", f"{job.id}_input.txt")
@@ -67,7 +63,7 @@ class BatchWorker:
             if not os.path.exists(input_path):
                 job.status = "failed"
                 job.error_message = "Input file not found"
-                job.completed_at = _utc_now()
+                job.completed_at = utc_now()
                 db.commit()
                 return
 
@@ -90,7 +86,7 @@ class BatchWorker:
                 except json.JSONDecodeError as e:
                     job.status = "failed"
                     job.error_message = f"Invalid JSON: {str(e)}"
-                    job.completed_at = _utc_now()
+                    job.completed_at = utc_now()
                     db.commit()
                     return
             else:
@@ -112,7 +108,7 @@ class BatchWorker:
             job.output_size = output_size
             job.hit_counts = dict(hit_counts)
             job.output_path = output_path
-            job.completed_at = _utc_now()
+            job.completed_at = utc_now()
             db.commit()
 
         except Exception as e:
@@ -126,7 +122,7 @@ class BatchWorker:
                     if job_ref:
                         job_ref.status = "failed"
                         job_ref.error_message = str(e)[:500]
-                        job_ref.completed_at = _utc_now()
+                        job_ref.completed_at = utc_now()
                         db.commit()
             except Exception as inner_e:
                 print(f"[BatchWorker] Failed to update job status: {inner_e}")

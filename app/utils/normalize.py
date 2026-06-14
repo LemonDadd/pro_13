@@ -86,9 +86,3 @@ def map_position(normalized_start: int, normalized_end: int, position_map: list[
     orig_end = position_map[normalized_end - 1] + 1 if normalized_end - 1 < len(position_map) else position_map[-1] + 1
 
     return orig_start, orig_end
-
-
-def strip_whitespace(text: str) -> str:
-    if not text:
-        return ""
-    return text.strip()

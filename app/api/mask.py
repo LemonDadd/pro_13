@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import get_tenant_id
 from app.core.database import get_db
-from app.schemas.api import MaskRequest, MaskResponse, FindingResponse
+from app.schemas.api import MaskRequest, MaskResponse, findings_to_response
 from app.services.mask_service import mask_text, mask_json
 from app.services.audit_service import record_audit
 
@@ -28,18 +28,14 @@ def mask(
 
     if request.text is not None:
         masked_text, findings, mapping_id = mask_text(
-            request.text,
-            strategy=request.strategy,
-            include_types=request.include_types,
-            tenant=tenant_id,
+            request.text, strategy=request.strategy,
+            include_types=request.include_types, tenant=tenant_id,
         )
         total_length = len(request.text)
     elif request.json_obj is not None:
         masked_json, findings, mapping_id = mask_json(
-            request.json_obj,
-            strategy=request.strategy,
-            include_types=request.include_types,
-            tenant=tenant_id,
+            request.json_obj, strategy=request.strategy,
+            include_types=request.include_types, tenant=tenant_id,
         )
         total_length = len(json.dumps(request.json_obj))
     elif request.content is not None:
@@ -47,47 +43,27 @@ def mask(
             try:
                 json_data = json.loads(request.content)
                 masked_json, findings, mapping_id = mask_json(
-                    json_data,
-                    strategy=request.strategy,
-                    include_types=request.include_types,
-                    tenant=tenant_id,
+                    json_data, strategy=request.strategy,
+                    include_types=request.include_types, tenant=tenant_id,
                 )
                 total_length = len(request.content)
             except json.JSONDecodeError:
                 raise HTTPException(status_code=400, detail="Invalid JSON content")
         else:
             masked_text, findings, mapping_id = mask_text(
-                request.content,
-                strategy=request.strategy,
-                include_types=request.include_types,
-                tenant=tenant_id,
+                request.content, strategy=request.strategy,
+                include_types=request.include_types, tenant=tenant_id,
             )
             total_length = len(request.content)
     else:
         raise HTTPException(status_code=400, detail="Either 'text', 'json', or 'content' must be provided")
 
-    response_findings = [
-        FindingResponse(
-            type=f.type,
-            start=f.start,
-            end=f.end,
-            length=f.length,
-            valueHash=f.value_hash,
-            confidence=f.confidence,
-            fieldPath=f.field_path,
-        )
-        for f in findings
-        if not f.is_whitelist
-    ]
+    response_findings = findings_to_response(findings)
 
     record_audit(
-        db=db,
-        tenant_id=tenant_id,
-        op="mask",
-        findings=findings,
-        total_length=total_length,
-        strategy=request.strategy,
-        mapping_id=mapping_id,
+        db=db, tenant_id=tenant_id, op="mask",
+        findings=findings, total_length=total_length,
+        strategy=request.strategy, mapping_id=mapping_id,
     )
 
     return MaskResponse(
