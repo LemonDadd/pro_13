@@ -50,7 +50,7 @@ def _middle_mask(value: str, type_name: str) -> str:
 
 def _hash_mask(value: str) -> str:
     h = compute_value_hash(value)
-    return f"[HASH:" + h
+    return f"[HASH:{h}]"
 
 
 def mask_text(

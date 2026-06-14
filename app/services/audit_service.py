@@ -6,6 +6,10 @@ from sqlalchemy.orm import Session
 from app.models.audit import AuditLog
 
 
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 def record_audit(
     db: Session,
     tenant_id: str,
@@ -15,7 +19,8 @@ def record_audit(
     strategy: str | None = None,
     mapping_id: str | None = None,
 ) -> AuditLog:
-    hit_counts = Counter(f.type for f in findings)
+    filtered = [f for f in findings if not getattr(f, "is_whitelist", False)]
+    hit_counts = Counter(f.type for f in filtered)
     log = AuditLog(
         tenant_id=tenant_id,
         op=op,
@@ -34,15 +39,15 @@ def get_daily_stats(db: Session, tenant_id: str, target_date: date | None = None
     if target_date is None:
         target_date = datetime.now(timezone.utc).date()
 
-    start = datetime.combine(target_date, datetime.min.time())
-    end = datetime.combine(target_date, datetime.max.time())
+    start_utc = datetime.combine(target_date, datetime.min.time(), tzinfo=timezone.utc)
+    end_utc = datetime.combine(target_date, datetime.max.time(), tzinfo=timezone.utc)
 
     logs = (
         db.query(AuditLog)
         .filter(
             AuditLog.tenant_id == tenant_id,
-            AuditLog.created_at >= start,
-            AuditLog.created_at <= end,
+            AuditLog.created_at >= start_utc,
+            AuditLog.created_at <= end_utc,
         )
         .all()
     )

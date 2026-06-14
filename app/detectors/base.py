@@ -48,7 +48,7 @@ def detect_text(text: str, include_types: list[str] | None = None, tenant: str =
     if not text:
         return []
     engine = get_rule_engine()
-    rules = engine.get_rules()
+    rules = engine.get_rules(tenant=tenant)
     whitelist = engine.get_whitelist_fields()
 
     findings = []

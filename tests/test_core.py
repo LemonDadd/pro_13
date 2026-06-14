@@ -139,6 +139,7 @@ class TestMaskValue:
     def test_mask_hash(self):
         result = mask_value("13812345678", "hash", "PHONE_CN")
         assert result.startswith("[HASH:")
+        assert result.endswith("]")
         assert ":" in result
 
     def test_mask_remove(self):
@@ -183,6 +184,7 @@ class TestMaskText:
         text = "手机号13812345678"
         masked, findings, _ = mask_text(text, strategy="hash")
         assert "[HASH:" in masked
+        assert masked.count("]") >= 1
         assert "13812345678" not in masked
 
 
@@ -254,6 +256,84 @@ class TestValueHash:
         from app.utils.hash_utils import compute_value_hash
         h = compute_value_hash("13812345678")
         assert ":11" in h
+
+
+class TestTenantRuleIsolation:
+    def test_rules_isolated_by_tenant(self):
+        engine = get_rule_engine()
+        engine.add_custom_rule(
+            "CUSTOM_TENANT_A",
+            {
+                "description": "Tenant A custom rule",
+                "pattern": r'\bTENANT_A_TOKEN_\w+\b',
+                "confidence": "high",
+                "priority": 200,
+                "enabled": True,
+            },
+            tenant="tenant_a",
+        )
+        tenant_a_rules = {r.type_name for r in engine.get_rules(tenant="tenant_a")}
+        tenant_b_rules = {r.type_name for r in engine.get_rules(tenant="tenant_b")}
+
+        assert "CUSTOM_TENANT_A" in tenant_a_rules
+        assert "CUSTOM_TENANT_A" not in tenant_b_rules
+
+        findings_a = detect_text("TENANT_A_TOKEN_abc123", tenant="tenant_a")
+        findings_b = detect_text("TENANT_A_TOKEN_abc123", tenant="tenant_b")
+
+        assert len(findings_a) == 1
+        assert findings_a[0].type == "CUSTOM_TENANT_A"
+        assert len(findings_b) == 0
+
+        engine.remove_custom_rule("CUSTOM_TENANT_A", tenant="tenant_a")
+
+    def test_default_rules_available_to_all_tenants(self):
+        engine = get_rule_engine()
+        rules_default = {r.type_name for r in engine.get_rules(tenant="default")}
+        rules_other = {r.type_name for r in engine.get_rules(tenant="some_tenant")}
+
+        assert "PHONE_CN" in rules_default
+        assert "PHONE_CN" in rules_other
+
+
+class TestWhitelistAuditExclusion:
+    def test_whitelist_not_in_audit_hit_counts(self):
+        from collections import Counter
+        from app.services.audit_service import record_audit
+
+        data = {
+            "password": "13812345678",
+            "phone": "13987654321",
+        }
+        findings = detect_json(data)
+
+        has_whitelist = any(f.is_whitelist for f in findings)
+        assert has_whitelist
+
+        filtered = [f for f in findings if not getattr(f, "is_whitelist", False)]
+        hit_counts = Counter(f.type for f in filtered)
+
+        assert "PHONE_CN" in hit_counts
+        assert hit_counts["PHONE_CN"] == 1
+
+
+class TestBatchWorkerRobustness:
+    def test_worker_exception_safe(self):
+        import threading
+        from app.workers.batch_worker import BatchWorker
+
+        worker = BatchWorker()
+
+        def _fake_process():
+            raise RuntimeError("simulated error")
+
+        worker._process_next_job = _fake_process
+
+        t = threading.Thread(target=worker._run, daemon=True)
+        t.start()
+        worker._stop_event.set()
+        t.join(timeout=2)
+        assert not t.is_alive()
 
 
 if __name__ == "__main__":

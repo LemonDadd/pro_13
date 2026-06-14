@@ -1,6 +1,6 @@
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Form
 from sqlalchemy.orm import Session
@@ -12,6 +12,10 @@ from app.models.batch import BatchJob
 from app.schemas.api import BatchJobResponse
 
 router = APIRouter(prefix="/batch", tags=["batch"])
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 @router.post("/mask", response_model=BatchJobResponse)
@@ -69,10 +73,19 @@ def get_batch_status(
         raise HTTPException(status_code=404, detail="Job not found")
     if job.tenant_id != tenant_id:
         raise HTTPException(status_code=403, detail="Access denied")
-    return _job_to_response(job)
+    return _job_to_response(job, include_content=True)
 
 
-def _job_to_response(job: BatchJob) -> BatchJobResponse:
+def _job_to_response(job: BatchJob, include_content: bool = False) -> BatchJobResponse:
+    masked_content = None
+    if include_content and job.status == "completed" and job.output_path:
+        if os.path.exists(job.output_path):
+            try:
+                with open(job.output_path, "r", encoding="utf-8") as f:
+                    masked_content = f.read()
+            except Exception:
+                masked_content = None
+
     return BatchJobResponse(
         jobId=job.id,
         status=job.status,
@@ -80,6 +93,7 @@ def _job_to_response(job: BatchJob) -> BatchJobResponse:
         outputSize=job.output_size,
         hitCounts=job.hit_counts,
         errorMessage=job.error_message,
+        maskedContent=masked_content,
         createdAt=job.created_at.isoformat() if job.created_at else None,
         startedAt=job.started_at.isoformat() if job.started_at else None,
         completedAt=job.completed_at.isoformat() if job.completed_at else None,

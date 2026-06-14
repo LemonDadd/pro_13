@@ -10,8 +10,9 @@ from app.core.config import settings
 
 
 class Rule:
-    def __init__(self, type_name: str, config: dict):
+    def __init__(self, type_name: str, config: dict, tenant: str = "default"):
         self.type_name = type_name
+        self.tenant = tenant
         self.description = config.get("description", "")
         self.pattern = config.get("pattern", "")
         self.confidence = config.get("confidence", "med")
@@ -27,6 +28,7 @@ class RuleEngine:
         self._rules: dict[str, Rule] = {}
         self._whitelist_fields: list[str] = []
         self._custom_rules: dict[str, dict] = {}
+        self._tenant_custom: dict[str, dict[str, dict]] = {}
         self._last_mtime: float = 0
         self._lock = threading.RLock()
         self._stop_event = threading.Event()
@@ -48,12 +50,19 @@ class RuleEngine:
             for name, cfg in rules_data.items():
                 if not cfg.get("enabled", True):
                     continue
-                rules[name] = Rule(name, cfg)
+                rules[name] = Rule(name, cfg, tenant="default")
 
             for name, cfg in self._custom_rules.items():
                 if not cfg.get("enabled", True):
                     continue
-                rules[name] = Rule(name, cfg)
+                rules[name] = Rule(name, cfg, tenant="default")
+
+            for tenant, tenant_rules in self._tenant_custom.items():
+                for name, cfg in tenant_rules.items():
+                    if not cfg.get("enabled", True):
+                        continue
+                    key = f"{tenant}:{name}"
+                    rules[key] = Rule(name, cfg, tenant=tenant)
 
             self._rules = rules
             self._last_mtime = os.path.getmtime(self.rules_file)
@@ -85,25 +94,41 @@ class RuleEngine:
         if self._reload_thread:
             self._reload_thread.join(timeout=2)
 
-    def get_rules(self) -> list[Rule]:
+    def get_rules(self, tenant: str = "default") -> list[Rule]:
         with self._lock:
-            return sorted(self._rules.values(), key=lambda r: (-r.priority, r.type_name))
+            result = []
+            for rule in self._rules.values():
+                if rule.tenant == "default" or rule.tenant == tenant:
+                    result.append(rule)
+            return sorted(result, key=lambda r: (-r.priority, r.type_name))
 
     def get_whitelist_fields(self) -> list[str]:
         with self._lock:
             return list(self._whitelist_fields)
 
     def add_custom_rule(self, type_name: str, config: dict, tenant: str = "default"):
-        key = f"{tenant}:{type_name}" if tenant != "default" else type_name
         with self._lock:
-            self._custom_rules[key] = config
+            if tenant == "default":
+                self._custom_rules[type_name] = config
+                key = type_name
+            else:
+                if tenant not in self._tenant_custom:
+                    self._tenant_custom[tenant] = {}
+                self._tenant_custom[tenant][type_name] = config
+                key = f"{tenant}:{type_name}"
+
             if config.get("enabled", True):
-                self._rules[key] = Rule(key, config)
+                self._rules[key] = Rule(type_name, config, tenant=tenant)
 
     def remove_custom_rule(self, type_name: str, tenant: str = "default"):
-        key = f"{tenant}:{type_name}" if tenant != "default" else type_name
         with self._lock:
-            self._custom_rules.pop(key, None)
+            if tenant == "default":
+                self._custom_rules.pop(type_name, None)
+                key = type_name
+            else:
+                tenant_rules = self._tenant_custom.get(tenant, {})
+                tenant_rules.pop(type_name, None)
+                key = f"{tenant}:{type_name}"
             self._rules.pop(key, None)
 
 

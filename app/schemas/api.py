@@ -63,6 +63,7 @@ class BatchJobResponse(BaseModel):
     outputSize: Optional[int] = None
     hitCounts: Optional[dict] = None
     errorMessage: Optional[str] = None
+    maskedContent: Optional[str] = None
     createdAt: Optional[str] = None
     startedAt: Optional[str] = None
     completedAt: Optional[str] = None
