@@ -1,0 +1,87 @@
+version: "1.0"
+
+whitelist_fields:
+  - password
+  - passwd
+  - pwd
+  - secret
+  - token
+  - api_key
+  - apikey
+  - private_key
+  - privatekey
+
+rules:
+  PHONE_CN:
+    description: "中国大陆手机号"
+    pattern: '(?<!\d)1[3-9]\d{9}(?!\d)'
+    confidence: high
+    priority: 100
+    enabled: true
+
+  ID_CARD:
+    description: "中国居民身份证号（18位）"
+    pattern: '(?<!\d)[1-9]\d{5}(19|20)\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\d{3}[\dXx](?!\d)'
+    confidence: high
+    priority: 90
+    validator: id_card
+    enabled: true
+
+  EMAIL:
+    description: "电子邮箱地址"
+    pattern: '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+    confidence: med
+    priority: 80
+    enabled: true
+
+  BANK_CARD:
+    description: "中国银行卡号"
+    pattern: '(?<!\d)[3-6]\d{15,18}(?!\d)'
+    confidence: med
+    priority: 70
+    validator: luhn
+    enabled: true
+
+  AWS_KEY:
+    description: "AWS Access Key"
+    pattern: 'AKIA[0-9A-Z]{16}'
+    confidence: high
+    priority: 100
+    enabled: true
+
+  AWS_SECRET:
+    description: "AWS Secret Key"
+    pattern: "(?i)(aws_secret_access_key|aws_secret|secret_access_key)\\s*[:=]\\s*[\"']?[A-Za-z0-9/+=]{40}[\"']?"
+    confidence: high
+    priority: 100
+    enabled: true
+
+  JWT:
+    description: "JSON Web Token"
+    pattern: 'eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+'
+    confidence: med
+    priority: 60
+    enabled: true
+
+  IP_PRIVATE:
+    description: "内网 IP 地址"
+    pattern: '\b(?:10\.\d{1,3}|172\.(?:1[6-9]|2[0-9]|3[01])|192\.168|127\.\d{1,3})\.\d{1,3}\.\d{1,3}\b'
+    confidence: high
+    priority: 50
+    enabled: true
+
+  CHINA_POSTCODE:
+    description: "中国邮政编码"
+    pattern: '(?<!\d)[1-9]\d{5}(?!\d)'
+    confidence: low
+    priority: 30
+    enabled: false
+
+  PASSPORT_CN:
+    description: "中国护照号"
+    pattern: '(?<![A-Z0-9])[EG]\d{8}(?![A-Z0-9])'
+    confidence: med
+    priority: 40
+    enabled: false
+
+custom_rules: {}
