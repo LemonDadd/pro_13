@@ -1,6 +1,7 @@
 import json
 from typing import Any
 
+from app.detectors.finding import Finding
 from app.rules.engine import Rule, get_rule_engine
 from app.utils.hash_utils import compute_value_hash, merge_findings, is_whitelist_field
 from app.utils.validators import run_validator
@@ -8,42 +9,7 @@ from app.utils.json_traverse import traverse_json, get_field_name
 from app.utils.normalize import normalize_text, map_position
 from app.detectors.ner import get_detector_pipeline
 
-
-class Finding:
-    def __init__(
-        self,
-        type: str,
-        start: int,
-        end: int,
-        value: str,
-        confidence: str = "med",
-        field_path: str | None = None,
-        is_whitelist: bool = False,
-    ):
-        self.type = type
-        self.start = start
-        self.end = end
-        self.length = end - start
-        self.value = value
-        self.value_hash = compute_value_hash(value)
-        self.confidence = confidence
-        self.field_path = field_path
-        self.is_whitelist = is_whitelist
-
-    def to_dict(self, include_value: bool = False) -> dict:
-        d = {
-            "type": self.type,
-            "start": self.start,
-            "end": self.end,
-            "length": self.length,
-            "valueHash": self.value_hash,
-            "confidence": self.confidence,
-        }
-        if self.field_path:
-            d["fieldPath"] = self.field_path
-        if include_value:
-            d["value"] = self.value
-        return d
+__all__ = ["Finding"]
 
 
 def detect_text(text: str, include_types: list[str] | None = None, tenant: str = "default") -> list[Finding]:
@@ -66,7 +32,6 @@ def detect_text(text: str, include_types: list[str] | None = None, tenant: str =
         for match in rule.regex.finditer(normalized):
             norm_start = match.start()
             norm_end = match.end()
-            norm_value = match.group(0)
             orig_start, orig_end = map_position(norm_start, norm_end, pos_map)
             orig_value = text[orig_start:orig_end]
 

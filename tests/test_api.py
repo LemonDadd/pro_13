@@ -271,6 +271,155 @@ class TestBugFixes:
         assert data["json"]["phone"] == "138****5678"
 
 
+class TestRulesAPI:
+    def test_list_builtin_rules(self, client):
+        response = client.get("/v1/rules/builtin", headers=HEADERS)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] > 0
+        rule_types = {r["type_name"] for r in data["rules"]}
+        assert "PHONE_CN" in rule_types
+        assert "EMAIL" in rule_types
+
+    def test_add_and_list_custom_rule(self, client):
+        response = client.post(
+            "/v1/rules/custom",
+            json={
+                "type_name": "CUSTOM_ORDER_NO",
+                "pattern": r"ORD\d{8}",
+                "description": "订单号",
+                "confidence": "high",
+                "priority": 100,
+                "enabled": True,
+            },
+            headers=HEADERS,
+        )
+        assert response.status_code == 201
+        assert response.json()["type_name"] == "CUSTOM_ORDER_NO"
+
+        list_resp = client.get("/v1/rules/custom", headers=HEADERS)
+        assert list_resp.status_code == 200
+        assert list_resp.json()["total"] >= 1
+
+        detect_resp = client.post(
+            "/v1/detect",
+            json={"text": "订单号 ORD20240101"},
+            headers=HEADERS,
+        )
+        assert detect_resp.status_code == 200
+        types = {f["type"] for f in detect_resp.json()["findings"]}
+        assert "CUSTOM_ORDER_NO" in types
+
+    def test_delete_custom_rule(self, client):
+        client.post(
+            "/v1/rules/custom",
+            json={
+                "type_name": "TO_DELETE",
+                "pattern": r"DEL\d+",
+                "description": "to be deleted",
+                "confidence": "med",
+                "priority": 50,
+                "enabled": True,
+            },
+            headers=HEADERS,
+        )
+
+        del_resp = client.delete("/v1/rules/custom/TO_DELETE", headers=HEADERS)
+        assert del_resp.status_code == 204
+
+    def test_add_invalid_regex(self, client):
+        response = client.post(
+            "/v1/rules/custom",
+            json={
+                "type_name": "BAD_REGEX",
+                "pattern": "[invalid(",
+                "confidence": "med",
+                "priority": 50,
+                "enabled": True,
+            },
+            headers=HEADERS,
+        )
+        assert response.status_code == 400
+
+    def test_cannot_override_builtin(self, client):
+        response = client.post(
+            "/v1/rules/custom",
+            json={
+                "type_name": "PHONE_CN",
+                "pattern": r"123",
+                "confidence": "med",
+                "priority": 50,
+                "enabled": True,
+            },
+            headers=HEADERS,
+        )
+        assert response.status_code == 400
+
+
+class TestNormalize:
+    def test_fullwidth_digits_detection(self, client):
+        text = "手机号 １３８１２３４５６７８"
+        response = client.post(
+            "/v1/detect",
+            json={"text": text},
+            headers=HEADERS,
+        )
+        assert response.status_code == 200
+        types = {f["type"] for f in response.json()["findings"]}
+        assert "PHONE_CN" in types
+
+    def test_zero_width_chars_detection(self, client):
+        text = "手机号 138\u200b1234\u200c5678"
+        response = client.post(
+            "/v1/detect",
+            json={"text": text},
+            headers=HEADERS,
+        )
+        assert response.status_code == 200
+        types = {f["type"] for f in response.json()["findings"]}
+        assert "PHONE_CN" in types
+
+    def test_normalize_preserves_original_positions(self, client):
+        text = "手机号 １３８１２３４５６７８ end"
+        response = client.post(
+            "/v1/detect",
+            json={"text": text},
+            headers=HEADERS,
+        )
+        assert response.status_code == 200
+        findings = response.json()["findings"]
+        assert len(findings) >= 1
+        phone_finding = [f for f in findings if f["type"] == "PHONE_CN"][0]
+        assert phone_finding["start"] >= 0
+        assert phone_finding["end"] <= len(text)
+        assert "１３８１２３４５６７８" in text[phone_finding["start"]:phone_finding["end"]]
+
+
+class TestNERDetector:
+    def test_ner_disabled_by_default(self, client):
+        from app.detectors.ner import get_detector_pipeline
+        pipeline = get_detector_pipeline()
+        assert pipeline._ner is None or not getattr(pipeline._ner, "enabled", False)
+
+    def test_ner_enable_disable_no_crash(self, client):
+        from app.detectors.ner import get_detector_pipeline
+        pipeline = get_detector_pipeline()
+        try:
+            pipeline.enable_ner()
+            pipeline.enable_ner()
+            pipeline.disable_ner()
+            pipeline.disable_ner()
+        except Exception as e:
+            pytest.fail(f"NER enable/disable crashed: {e}")
+
+    def test_ner_run_extra_detectors_empty_by_default(self, client):
+        from app.detectors.ner import get_detector_pipeline
+        pipeline = get_detector_pipeline()
+        result = pipeline.run_extra_detectors("测试文本")
+        assert isinstance(result, list)
+        assert len(result) == 0
+
+
 class TestHealthEndpoint:
     def test_health(self, client):
         response = client.get("/health")

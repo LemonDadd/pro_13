@@ -12,6 +12,7 @@ from app.api.stats import router as stats_router
 from app.api.rules import router as rules_router
 from app.rules.engine import get_rule_engine
 from app.workers.batch_worker import get_batch_worker
+from app.detectors.ner import get_detector_pipeline
 
 
 @asynccontextmanager
@@ -22,6 +23,13 @@ async def lifespan(app: FastAPI):
         print(f"Warning: Database initialization failed: {e}")
 
     get_rule_engine()
+
+    if settings.ner_enabled:
+        try:
+            pipeline = get_detector_pipeline()
+            pipeline.enable_ner(model_path=settings.ner_model_path)
+        except Exception as e:
+            print(f"Warning: Failed to enable NER detector: {e}")
 
     worker = get_batch_worker()
     worker.start()
@@ -51,6 +59,7 @@ def create_app() -> FastAPI:
     app.include_router(mask_router, prefix="/v1")
     app.include_router(batch_router, prefix="/v1")
     app.include_router(stats_router, prefix="/v1")
+    app.include_router(rules_router, prefix="/v1")
 
     @app.get("/health")
     async def health():

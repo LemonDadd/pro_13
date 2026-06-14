@@ -26,6 +26,9 @@ class Settings(BaseSettings):
 
     hash_salt: str = "sensitive-data-salt"
 
+    ner_enabled: bool = False
+    ner_model_path: str | None = None
+
     ip_private_ranges: list = [
         "10.0.0.0/8",
         "172.16.0.0/12",
