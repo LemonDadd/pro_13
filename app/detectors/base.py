@@ -5,6 +5,8 @@ from app.rules.engine import Rule, get_rule_engine
 from app.utils.hash_utils import compute_value_hash, merge_findings, is_whitelist_field
 from app.utils.validators import run_validator
 from app.utils.json_traverse import traverse_json, get_field_name
+from app.utils.normalize import normalize_text, map_position
+from app.detectors.ner import get_detector_pipeline
 
 
 class Finding:
@@ -47,9 +49,13 @@ class Finding:
 def detect_text(text: str, include_types: list[str] | None = None, tenant: str = "default") -> list[Finding]:
     if not text:
         return []
+
+    normalized, pos_map = normalize_text(text)
+    if not normalized:
+        return []
+
     engine = get_rule_engine()
     rules = engine.get_rules(tenant=tenant)
-    whitelist = engine.get_whitelist_fields()
 
     findings = []
     for rule in rules:
@@ -57,19 +63,23 @@ def detect_text(text: str, include_types: list[str] | None = None, tenant: str =
             continue
         if not rule.regex:
             continue
-        for match in rule.regex.finditer(text):
-            value = match.group(0)
-            start = match.start()
-            end = match.end()
+        for match in rule.regex.finditer(normalized):
+            norm_start = match.start()
+            norm_end = match.end()
+            norm_value = match.group(0)
+            orig_start, orig_end = map_position(norm_start, norm_end, pos_map)
+            orig_value = text[orig_start:orig_end]
+
             confidence = rule.confidence
-            if rule.validator and not run_validator(rule.validator, value):
+            if rule.validator and not run_validator(rule.validator, orig_value):
                 confidence = _downgrade_confidence(confidence)
+
             findings.append(
                 Finding(
                     type=rule.type_name,
-                    start=start,
-                    end=end,
-                    value=value,
+                    start=orig_start,
+                    end=orig_end,
+                    value=orig_value,
                     confidence=confidence,
                 )
             )
@@ -86,6 +96,11 @@ def detect_text(text: str, include_types: list[str] | None = None, tenant: str =
                 confidence=fd.get("confidence", "med"),
             )
         )
+
+    pipeline = get_detector_pipeline()
+    extra_findings = pipeline.run_extra_detectors(text, include_types=include_types, tenant=tenant)
+    result.extend(extra_findings)
+
     return result
 
 
@@ -114,7 +129,3 @@ def _downgrade_confidence(confidence: str) -> str:
     if confidence == "med":
         return "low"
     return "low"
-
-
-def normalize_text(text: str) -> str:
-    return text

@@ -9,6 +9,7 @@ from app.api.detect import router as detect_router
 from app.api.mask import router as mask_router
 from app.api.batch import router as batch_router
 from app.api.stats import router as stats_router
+from app.api.rules import router as rules_router
 from app.rules.engine import get_rule_engine
 from app.workers.batch_worker import get_batch_worker
 
